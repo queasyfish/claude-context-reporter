@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Claude Context Reporter",
+  "name": "AI Context Reporter",
   "version": "1.0.0",
-  "description": "Capture element context for AI assistants",
+  "description": "Capture element context for AI coding agents",
   "permissions": ["storage", "contextMenus", "activeTab", "downloads"],
   "background": {
     "service_worker": "background.js"

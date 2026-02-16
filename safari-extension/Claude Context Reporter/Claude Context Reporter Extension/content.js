@@ -1,12 +1,12 @@
-// Claude Context Reporter - Content Script
+// AI Context Reporter - Content Script
 // Handles element picking, data extraction, and capture modal
 
 (function() {
   "use strict";
 
   // Prevent multiple injections
-  if (window.__claudeContextReporterInjected) return;
-  window.__claudeContextReporterInjected = true;
+  if (window.__aiContextReporterInjected) return;
+  window.__aiContextReporterInjected = true;
 
   // Constants
   const DEBOUNCE_MS = 16; // ~60fps

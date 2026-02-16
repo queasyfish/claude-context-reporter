@@ -1,4 +1,4 @@
-// Claude Context Reporter - Background Service Worker
+// AI Context Reporter - Background Service Worker
 // Handles context menu, storage, and message routing
 
 "use strict";
@@ -340,4 +340,4 @@ async function getExportFolder(url) {
 }
 
 // Log startup
-console.info("Claude Context Reporter background script loaded");
+console.info("AI Context Reporter background script loaded");

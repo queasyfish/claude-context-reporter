@@ -5,8 +5,8 @@
  * This module isolates storage implementation from business logic.
  */
 
-const STORAGE_KEY = 'claude-context-report';
-const SETTINGS_KEY = 'claude-context-settings';
+const STORAGE_KEY = 'ai-context-reports';
+const SETTINGS_KEY = 'ai-context-settings';
 
 /**
  * Project mapping for URL-based folder routing

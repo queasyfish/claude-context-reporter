@@ -1,4 +1,4 @@
-// Claude Context Reporter - Popup Script
+// AI Context Reporter - Popup Script
 // Manages the reports list, copy, delete, export, and drag-drop functionality
 
 "use strict";

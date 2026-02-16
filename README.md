@@ -1,285 +1,149 @@
-# claude-context-reporter
+# AI Context Reporter
 
-Capture UI context from React apps and feed it to Claude Code agents for debugging and development.
+Browser extensions for capturing element context to share with AI coding agents. Works with any AI assistant that accepts markdown input.
+
+## Features
+
+- **Element Picker**: Visual selection of any DOM element
+- **Context Capture**: CSS selector, XPath, computed styles, text content, attributes
+- **Project Organization**: Route reports to project-specific folders based on URL patterns
+- **Export Options**: Auto-save to `~/Downloads/ai-agent-reports/`, copy as markdown, drag-and-drop
+- **Cross-Browser**: Available for Chrome and Safari
 
 ## Installation
 
+### Chrome Extension
+
+1. Open `chrome://extensions/`
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select the `chrome-extension/.output/chrome-mv3` directory
+
+To build from source:
 ```bash
-npm install claude-context-reporter
-# or
-yarn add claude-context-reporter
-# or
-pnpm add claude-context-reporter
+cd chrome-extension
+npm install
+npm run build
 ```
 
-## Quick Start
+### Safari Extension
 
-Add the `ContextReporter` component to your app layout (development only):
+1. Open the Xcode project:
+   ```bash
+   open "safari-extension/Claude Context Reporter/Claude Context Reporter.xcodeproj"
+   ```
+2. Build and run (Cmd+R)
+3. Open Safari → Settings → Extensions
+4. Enable "AI Context Reporter"
 
-```tsx
-// app/layout.tsx or App.tsx
-import { ContextReporter } from 'claude-context-reporter';
+## Usage
 
-export default function Layout({ children }) {
-  return (
-    <>
-      {children}
-      {process.env.NODE_ENV === 'development' && (
-        <ContextReporter position="bottom-right" />
-      )}
-    </>
-  );
-}
+### Capturing Elements
+
+**Chrome (DevTools):**
+1. Open DevTools (F12)
+2. Go to the "Context Report" panel
+3. Select an element in the Elements panel
+4. Add a comment and click "Save Report"
+
+**Safari (Context Menu):**
+1. Right-click any element
+2. Select "Capture for AI Context"
+3. Click the highlighted element
+4. Add a comment and save
+
+### Report Output
+
+Reports are saved as markdown files to:
+```
+~/Downloads/ai-agent-reports/{domain-or-project}/
 ```
 
-That's it! A floating button will appear in the corner of your app during development.
-
-## How It Works
-
-1. **Capture**: Click the floating button or press `Ctrl+Shift+.`
-2. **Select**: Hover over elements and click to select one
-3. **Describe**: Optionally add a description of the issue
-4. **Save**: Report is saved to `./reports/` (or console if server not running)
-5. **Claude Code**: Run `/process-reports` to select a report and create an implementation plan
-
-## Report Output Options
-
-### Option 1: Local Server (Recommended)
-
-Start the context reporter server in your project directory:
-
-```bash
-npx claude-context-reporter-server
+Example structure:
+```
+ai-agent-reports/
+├── localhost-3000/
+│   └── 2024-01-28-143022-localhost-3000-button.md
+├── github-com/
+│   └── 2024-01-28-142815-github-com-div.md
+└── my-react-app/          # Custom project folder
+    └── 2024-01-28-144500-localhost-3000-input.md
 ```
 
-Reports will be saved directly to `./reports/` with screenshots. This is the recommended approach as it:
-- Saves reports immediately to disk
-- Works without browser console access
-- Doesn't require the Chrome MCP extension for retrieval
+### Project Mappings
 
-### Option 2: Browser Console (Fallback)
+Configure project-specific folders in the Settings tab:
 
-If the server isn't running, reports are logged to the browser console. Use the `/context-reports` skill with the Chrome MCP extension to retrieve them.
+| Field | Example |
+|-------|---------|
+| Project Name | My React App |
+| URL Patterns | `localhost:3000`, `*.myapp.com` |
+| Folder | `my-react-app` |
 
-## What Gets Captured
+**Pattern Syntax:**
+- Exact match: `localhost:3000`, `staging.myapp.com`
+- Wildcard prefix: `*.myapp.com` (matches `app.myapp.com`, `api.myapp.com`)
+- Port wildcard: `localhost:*` (matches any localhost port)
 
-- **Element Info**: Tag, ID, classes, attributes, text content
-- **Component Path**: React component hierarchy (via fiber traversal)
-- **App State**: Zustand, Redux, or Jotai state (auto-detected)
-- **Screenshot**: Full-page screenshot
-- **Environment**: React version, URL, viewport size
+### Report Format
 
-## Configuration
-
-```tsx
-<ContextReporter
-  // Button position
-  position="bottom-right" // 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
-
-  // Keyboard shortcut
-  hotkey="ctrl+shift+." // Default
-
-  // Custom state to include
-  getCustomState={() => ({
-    myCustomData: getMyData(),
-  })}
-
-  // Keys to redact from captured state
-  excludeStateKeys={['password', 'apiKey', 'token']}
-
-  // Callback when capture completes
-  onCapture={(report) => {
-    console.log('Captured:', report.id);
-  }}
-
-  // z-index for overlay elements
-  zIndex={9999}
-
-  // Reporter configuration
-  reporter={{
-    serverUrl: 'http://localhost:9847', // Default
-    serverTimeout: 1000, // ms
-    forceConsole: false, // Always use console, never server
-  }}
-/>
-```
-
-## Server Configuration
-
-The server runs on port 9847 by default. Configure via environment variable:
-
-```bash
-PORT=9999 npx claude-context-reporter-server
-```
-
-### Server Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/report` | POST | Submit context report |
-| `/screenshot` | POST | Submit screenshot |
-| `/reports` | GET | List saved reports |
-
-### Report Storage
-
-```
-./reports/
-├── context-2026-01-28-143022-save-btn.md
-├── context-2026-01-28-142815-email.md
-└── screenshots/
-    ├── context-2026-01-28-143022-save-btn.png
-    └── context-2026-01-28-142815-email.png
-```
-
-## Exposing State Managers
-
-For automatic state capture, ensure your state manager is accessible:
-
-### Zustand
-
-```tsx
-import { exposeZustandStore } from 'claude-context-reporter';
-import { useStore } from './store';
-
-// In your app initialization
-if (process.env.NODE_ENV === 'development') {
-  exposeZustandStore(useStore);
-}
-```
-
-### Redux
-
-```tsx
-import { exposeReduxStore } from 'claude-context-reporter';
-import { store } from './store';
-
-if (process.env.NODE_ENV === 'development') {
-  exposeReduxStore(store);
-}
-```
-
-### Jotai
-
-```tsx
-import { exposeJotaiStore } from 'claude-context-reporter';
-import { getDefaultStore } from 'jotai';
-import { userAtom, settingsAtom } from './atoms';
-
-if (process.env.NODE_ENV === 'development') {
-  exposeJotaiStore(getDefaultStore(), [userAtom, settingsAtom]);
-}
-```
-
-## Claude Code Integration
-
-### Installing the Skill
-
-Copy the skill to your project's `.claude/skills/` directory:
-
-```bash
-# From your project root
-mkdir -p .claude/skills/process-reports
-cp node_modules/claude-context-reporter/skills/process-reports/SKILL.md .claude/skills/process-reports/
-```
-
-Or manually create `.claude/skills/process-reports/SKILL.md` and copy the contents from [skills/process-reports/SKILL.md](./skills/process-reports/SKILL.md).
-
-### Customizing the Skill
-
-Edit the skill file to add your project-specific mappings:
+Reports are markdown files containing:
 
 ```markdown
-### Mapping Components to Files
+# Element Context Report
 
-| Component Path | Likely File Location |
-|----------------|---------------------|
-| `HomePage` | `src/pages/Home.tsx` |
-| `UserProfile` | `src/components/UserProfile/index.tsx` |
-| `*Modal` | `src/components/modals/{name}Modal.tsx` |
+**Project:** My React App
+**Page URL:** http://localhost:3000/dashboard
+**Captured:** 1/28/2024, 2:30:22 PM
 
-### Hooks to Check
+## Comment
 
-For any component, check for related hooks:
-- `useUser.ts` for user data
-- `useAuth.ts` for authentication
+Button doesn't respond to clicks after form validation error
+
+## Element
+
+- **Tag:** `<button>`
+- **ID:** `submit-btn`
+- **CSS Selector:** `form > button#submit-btn`
+- **XPath:** `/html/body/div[1]/form/button[1]`
+
+## Text Content
+
+\`\`\`
+Submit Form
+\`\`\`
+
+## Computed Styles
+
+\`\`\`css
+display: inline-flex;
+background-color: rgb(37, 99, 235);
+...
+\`\`\`
 ```
 
-### Using the Skill
+## Using with AI Agents
 
-After capturing context in your app, use the `/process-reports` skill in Claude Code:
+1. **Direct Path**: Point your AI agent to `~/Downloads/ai-agent-reports/`
+2. **Copy/Paste**: Use the "Copy" button to copy markdown to clipboard
+3. **Drag and Drop**: Drag report cards directly into your IDE or terminal
 
-```
-/process-reports
-```
+## Development
 
-This will:
-1. Check for reports in `./reports/` first
-2. Fall back to reading from browser console if needed (requires `claude-in-chrome` MCP)
-3. Let you select which report to work on
-4. Enter plan mode to design and implement the fix
+### Chrome Extension
 
-## Advanced Usage
-
-### Check Server Availability
-
-```tsx
-import { isServerAvailable, clearServerCache } from 'claude-context-reporter';
-
-// Check if server is running
-const available = await isServerAvailable();
-
-// Clear cached server status (e.g., after starting server)
-clearServerCache();
+```bash
+cd chrome-extension
+npm install
+npm run dev      # Watch mode
+npm run build    # Production build
 ```
 
-### Custom Element Selection
+### Safari Extension
 
-```tsx
-import { useElementPicker, useContextCapture } from 'claude-context-reporter';
+Open in Xcode and build. The extension is in `safari-extension/Claude Context Reporter/`.
 
-function CustomCapture() {
-  const { captureContext } = useContextCapture();
-  const { startPicking, state, highlightPosition } = useElementPicker(
-    async (element) => {
-      const report = await captureContext(element, 'Custom capture');
-      console.log('Captured:', report);
-    }
-  );
-
-  return (
-    <button onClick={startPicking}>
-      Start Custom Capture
-    </button>
-  );
-}
-```
-
-### Programmatic Capture
-
-```tsx
-import { useContextCapture } from 'claude-context-reporter';
-
-function MyComponent() {
-  const { captureContext, lastReportMethod } = useContextCapture();
-  const ref = useRef<HTMLDivElement>(null);
-
-  const handleError = async (error: Error) => {
-    if (ref.current) {
-      const report = await captureContext(ref.current, `Error: ${error.message}`);
-      console.log(`Report sent via ${lastReportMethod}`); // 'server' or 'console'
-    }
-  };
-
-  return <div ref={ref}>...</div>;
-}
-```
-
-## Requirements
-
-- React 17+ or 18+
-- For server mode: Node.js 18+
-- For console mode: Browser with DevTools + Claude Code with `claude-in-chrome` MCP server
+Note: The Xcode project directories still use "Claude Context Reporter" naming. The user-facing name has been updated to "AI Context Reporter" in the manifest.
 
 ## License
 

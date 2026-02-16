@@ -2,8 +2,8 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   manifest: {
-    name: 'Claude Context Report',
-    description: 'DevTools extension for capturing element context for AI',
+    name: 'AI Context Reporter',
+    description: 'Capture element context for AI coding agents',
     version: '0.1.0',
     permissions: ['storage', 'downloads', 'contextMenus'],
   },

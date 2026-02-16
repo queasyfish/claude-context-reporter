@@ -5,8 +5,8 @@
  */
 
 export default defineBackground(() => {
-  const STORAGE_KEY = 'claude-context-report';
-  const SETTINGS_KEY = 'claude-context-settings';
+  const STORAGE_KEY = 'ai-context-reports';
+  const SETTINGS_KEY = 'ai-context-settings';
   const BASE_EXPORT_FOLDER = 'ai-agent-reports';
 
   // Get project mappings from storage
