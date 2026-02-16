@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Context Report Sidebar</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 12px;
+        padding: 8px;
+        color: #333;
+        background-color: #fff;
+      }
+      .section {
+        background-color: #f5f5f5;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        margin-bottom: 8px;
+      }
+      .section:last-child {
+        margin-bottom: 0;
+      }
+      .label {
+        font-weight: 600;
+        margin-bottom: 4px;
+        display: block;
+        color: #666;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .value {
+        font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 11px;
+        word-break: break-all;
+        white-space: pre-wrap;
+        color: #222;
+        line-height: 1.4;
+      }
+      .styles-section {
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .styles-section .value {
+        font-size: 10px;
+      }
+      .comment-textarea {
+        width: 100%;
+        font-family: inherit;
+        font-size: 12px;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        resize: vertical;
+        min-height: 60px;
+        box-sizing: border-box;
+      }
+      .comment-textarea:focus {
+        outline: none;
+        border-color: #4285f4;
+        box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+      }
+      .actions {
+        margin-top: 8px;
+      }
+      .save-button {
+        width: 100%;
+        padding: 8px 16px;
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .save-button:hover:not(:disabled) {
+        background-color: #3367d6;
+      }
+      .save-button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .save-feedback {
+        display: block;
+        margin-top: 4px;
+        font-size: 11px;
+        text-align: center;
+      }
+      .save-feedback.success {
+        color: #0d9488;
+      }
+      .save-feedback.error {
+        color: #dc2626;
+      }
+      .tabs {
+        display: flex;
+        flex-direction: row;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .tab-btn {
+        padding: 6px 12px;
+        border-radius: 4px;
+        background: #e5e5e5;
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .tab-btn.active {
+        background: #4285f4;
+        color: white;
+      }
+      .tab-btn:hover:not(.active) {
+        background: #ddd;
+      }
+      .reports-header {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      .clear-all-button {
+        background: transparent;
+        color: #dc2626;
+        border: 1px solid #dc2626;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+      }
+      .clear-all-button:hover {
+        background: #fef2f2;
+      }
+      .empty-state {
+        color: #999;
+        font-style: italic;
+        text-align: center;
+        padding: 16px;
+      }
+      .report-item {
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 6px;
+      }
+      .report-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .report-url {
+        font-size: 10px;
+        color: #666;
+        word-break: break-all;
+      }
+      .report-element {
+        font-size: 11px;
+        color: #4285f4;
+        font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+      }
+      .report-comment {
+        font-size: 11px;
+        color: #333;
+      }
+      .report-actions {
+        display: flex;
+        flex-direction: row;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .action-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      .copy-btn {
+        background: #4285f4;
+        color: white;
+        border: none;
+      }
+      .copy-btn:hover {
+        background: #3367d6;
+      }
+      .delete-btn {
+        background: transparent;
+        color: #dc2626;
+        border: 1px solid #dc2626;
+      }
+      .delete-btn:hover {
+        background: #fef2f2;
+      }
+      dialog {
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      dialog::backdrop {
+        background: rgba(0,0,0,0.3);
+      }
+      .dialog-message {
+        margin-bottom: 16px;
+        font-size: 13px;
+      }
+      .dialog-actions {
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .dialog-button {
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .dialog-button:not(.danger) {
+        background: #e5e5e5;
+        border: none;
+      }
+      .dialog-button.danger {
+        background: #dc2626;
+        color: white;
+        border: none;
+      }
+      .dialog-button.danger:hover {
+        background: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tabs">
+      <button class="tab-btn active" data-view="capture">Capture</button>
+      <button class="tab-btn" data-view="reports">Reports</button>
+    </div>
+
+    <div id="capture-view" class="view">
+    <div class="section">
+      <span class="label">Page URL</span>
+      <span id="url-value" class="value">Loading...</span>
+    </div>
+
+    <div class="section">
+      <span class="label">CSS Selector</span>
+      <span id="selector-value" class="value">Loading...</span>
+    </div>
+
+    <div class="section">
+      <span class="label">XPath</span>
+      <span id="xpath-value" class="value">Loading...</span>
+    </div>
+
+    <div class="section styles-section">
+      <span class="label">Computed Styles</span>
+      <pre id="styles-value" class="value">Loading...</pre>
+    </div>
+
+    <div class="section">
+      <span class="label">Comment</span>
+      <textarea id="comment-input" class="comment-textarea" placeholder="Describe what to fix or change..." rows="3"></textarea>
+    </div>
+
+    <div class="actions">
+      <button id="save-btn" class="save-button" disabled>Save Report</button>
+      <span id="save-feedback" class="save-feedback"></span>
+    </div>
+    </div>
+
+    <div id="reports-view" class="view" hidden>
+      <div class="section">
+        <div class="reports-header">
+          <span class="label">Saved Reports</span>
+          <button id="clear-all-btn" class="clear-all-button">Clear All</button>
+        </div>
+        <div id="report-list" class="report-list">
+          <p class="empty-state">No reports saved yet.</p>
+        </div>
+      </div>
+    </div>
+
+    <dialog id="clear-confirm-dialog">
+      <form method="dialog">
+        <p class="dialog-message">Delete all reports? This cannot be undone.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="dialog-button">Cancel</button>
+          <button value="confirm" class="dialog-button danger">Delete All</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

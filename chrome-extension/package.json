@@ -1,0 +1,16 @@
+{
+  "name": "claude-context-report-chrome-extension",
+  "version": "0.1.0",
+  "description": "Chrome DevTools extension for capturing element context for AI",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wxt": "^0.20.13"
+  }
+}
