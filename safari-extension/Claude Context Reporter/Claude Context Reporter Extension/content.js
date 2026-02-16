@@ -1,0 +1,835 @@
+// Claude Context Reporter - Content Script
+// Handles element picking, data extraction, and capture modal
+
+(function() {
+  "use strict";
+
+  // Prevent multiple injections
+  if (window.__claudeContextReporterInjected) return;
+  window.__claudeContextReporterInjected = true;
+
+  // Constants
+  const DEBOUNCE_MS = 16; // ~60fps
+  const MAX_TEXT_LENGTH = 500;
+  const MAX_HTML_LENGTH = 1000;
+  const MAX_ATTR_LENGTH = 200;
+  const MAX_SELECTOR_DEPTH = 10;
+
+  // State
+  let pickerActive = false;
+  let highlightOverlay = null;
+  let infoTooltip = null;
+  let currentElement = null;
+  let captureModal = null;
+  let lastMouseMoveTime = 0;
+  let pendingMouseMove = null;
+
+  // Styles for picker UI
+  const HIGHLIGHT_STYLE = `
+    position: fixed;
+    pointer-events: none;
+    border: 2px solid #2563eb;
+    background: rgba(37, 99, 235, 0.1);
+    z-index: 2147483646;
+    transition: all 0.05s ease-out;
+  `;
+
+  const TOOLTIP_STYLE = `
+    position: fixed;
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    z-index: 2147483647;
+    pointer-events: none;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  `;
+
+  const MODAL_STYLES = `
+    .ccr-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 2147483647;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    }
+    .ccr-modal {
+      background: #ffffff;
+      border-radius: 12px;
+      width: 480px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .ccr-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .ccr-modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+      margin: 0;
+    }
+    .ccr-modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #64748b;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+    .ccr-modal-close:hover {
+      color: #1e293b;
+    }
+    .ccr-modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      max-height: calc(80vh - 140px);
+    }
+    .ccr-element-info {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #475569;
+      word-break: break-all;
+    }
+    .ccr-element-tag {
+      font-weight: 600;
+      color: #2563eb;
+    }
+    .ccr-element-id {
+      color: #059669;
+    }
+    .ccr-element-class {
+      color: #7c3aed;
+    }
+    .ccr-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+    .ccr-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .ccr-textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    .ccr-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 6px;
+    }
+    .ccr-modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .ccr-btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+    }
+    .ccr-btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+    }
+    .ccr-btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    .ccr-btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+    .ccr-btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .ccr-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .ccr-toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 2147483647;
+      animation: ccr-slide-in 0.3s ease;
+    }
+    .ccr-toast-success {
+      background: #059669;
+      color: white;
+    }
+    .ccr-toast-error {
+      background: #dc2626;
+      color: white;
+    }
+    @keyframes ccr-slide-in {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  `;
+
+  // Utility: safe string truncation
+  function safeString(value, maxLength = MAX_TEXT_LENGTH) {
+    if (value == null) return "";
+    const str = String(value);
+    if (str.length <= maxLength) return str;
+    return str.substring(0, maxLength) + "…";
+  }
+
+  // Utility: check if element is valid for selection
+  function isValidElement(el) {
+    return el &&
+           el.nodeType === Node.ELEMENT_NODE &&
+           el !== document.documentElement &&
+           el !== document.body?.parentElement;
+  }
+
+  // Utility: check if element belongs to our UI
+  function isOurElement(el) {
+    if (!el) return false;
+    return el === highlightOverlay ||
+           el === infoTooltip ||
+           el.closest?.(".ccr-modal-overlay");
+  }
+
+  // Utility: get class string safely
+  function getClassString(element, maxClasses) {
+    try {
+      const className = element.className;
+      if (!className || typeof className !== "string") return "";
+
+      const classes = className.trim().split(/\s+/).filter(Boolean);
+      if (classes.length === 0) return "";
+
+      const truncated = classes.slice(0, maxClasses);
+      return "." + truncated.map(c => safeString(c, 20)).join(".");
+    } catch {
+      return "";
+    }
+  }
+
+  // Utility: escape HTML
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Listen for messages from background script
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "startPicker") {
+      try {
+        startPicker();
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error("Failed to start picker:", error);
+        sendResponse({ success: false, error: error.message });
+      }
+    }
+    return true;
+  });
+
+  // Start element picker mode
+  function startPicker() {
+    if (pickerActive) return;
+    pickerActive = true;
+
+    try {
+      // Inject styles if not already done
+      injectStyles();
+
+      // Create highlight overlay
+      highlightOverlay = document.createElement("div");
+      highlightOverlay.style.cssText = HIGHLIGHT_STYLE;
+      highlightOverlay.setAttribute("data-ccr", "highlight");
+      document.body.appendChild(highlightOverlay);
+
+      // Create info tooltip
+      infoTooltip = document.createElement("div");
+      infoTooltip.style.cssText = TOOLTIP_STYLE;
+      infoTooltip.setAttribute("data-ccr", "tooltip");
+      document.body.appendChild(infoTooltip);
+
+      // Add event listeners
+      document.addEventListener("mousemove", onMouseMove, true);
+      document.addEventListener("click", onElementClick, true);
+      document.addEventListener("keydown", onKeyDown, true);
+
+      // Change cursor
+      document.body.style.cursor = "crosshair";
+    } catch (error) {
+      console.error("Error starting picker:", error);
+      stopPicker();
+      throw error;
+    }
+  }
+
+  // Stop element picker mode
+  function stopPicker() {
+    if (!pickerActive) return;
+    pickerActive = false;
+
+    // Cancel pending mouse move
+    if (pendingMouseMove) {
+      cancelAnimationFrame(pendingMouseMove);
+      pendingMouseMove = null;
+    }
+
+    // Remove overlay and tooltip safely
+    try {
+      highlightOverlay?.remove();
+      infoTooltip?.remove();
+    } catch (e) {
+      // Elements may already be removed
+    }
+
+    highlightOverlay = null;
+    infoTooltip = null;
+
+    // Remove event listeners
+    document.removeEventListener("mousemove", onMouseMove, true);
+    document.removeEventListener("click", onElementClick, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+
+    // Restore cursor
+    if (document.body) {
+      document.body.style.cursor = "";
+    }
+    currentElement = null;
+  }
+
+  // Mouse move handler with frame-rate limiting
+  function onMouseMove(e) {
+    const now = performance.now();
+
+    // Skip if we're processing too fast
+    if (now - lastMouseMoveTime < DEBOUNCE_MS) {
+      // Schedule update for next frame if not already pending
+      if (!pendingMouseMove) {
+        pendingMouseMove = requestAnimationFrame(() => {
+          pendingMouseMove = null;
+          updateHighlight(e.clientX, e.clientY);
+        });
+      }
+      return;
+    }
+
+    lastMouseMoveTime = now;
+    updateHighlight(e.clientX, e.clientY);
+  }
+
+  // Update highlight position and tooltip
+  function updateHighlight(clientX, clientY) {
+    if (!pickerActive || !highlightOverlay || !infoTooltip) return;
+
+    try {
+      const element = document.elementFromPoint(clientX, clientY);
+
+      if (!element || isOurElement(element) || !isValidElement(element)) {
+        return;
+      }
+
+      currentElement = element;
+      const rect = element.getBoundingClientRect();
+
+      // Update highlight position
+      highlightOverlay.style.top = `${rect.top}px`;
+      highlightOverlay.style.left = `${rect.left}px`;
+      highlightOverlay.style.width = `${rect.width}px`;
+      highlightOverlay.style.height = `${rect.height}px`;
+
+      // Build tooltip text
+      const tagName = element.tagName.toLowerCase();
+      const id = element.id ? `#${safeString(element.id, 30)}` : "";
+      const classes = getClassString(element, 2);
+
+      infoTooltip.textContent = `${tagName}${id}${classes}`;
+
+      // Position tooltip above element, or below if no space
+      let tooltipTop = rect.top - 30;
+      if (tooltipTop < 5) {
+        tooltipTop = rect.bottom + 5;
+      }
+
+      // Keep tooltip in viewport horizontally
+      const tooltipLeft = Math.max(5, Math.min(rect.left, window.innerWidth - 310));
+
+      infoTooltip.style.top = `${tooltipTop}px`;
+      infoTooltip.style.left = `${tooltipLeft}px`;
+    } catch (error) {
+      console.error("Error updating highlight:", error);
+    }
+  }
+
+  // Click handler - select element
+  function onElementClick(e) {
+    if (!pickerActive) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    if (!currentElement || isOurElement(e.target)) return;
+
+    const element = currentElement;
+    stopPicker();
+
+    try {
+      showCaptureModal(element);
+    } catch (error) {
+      console.error("Error showing capture modal:", error);
+      showToast("Failed to capture element", "error");
+    }
+  }
+
+  // Keyboard handler - ESC to cancel
+  function onKeyDown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      stopPicker();
+    }
+  }
+
+  // Inject modal styles
+  function injectStyles() {
+    if (document.getElementById("ccr-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "ccr-styles";
+    style.textContent = MODAL_STYLES;
+
+    // Insert into head, or body if head not available
+    const target = document.head || document.body || document.documentElement;
+    target.appendChild(style);
+  }
+
+  // Show capture modal
+  function showCaptureModal(element) {
+    const elementData = extractElementData(element);
+
+    const tagName = element.tagName.toLowerCase();
+    const id = element.id ? `#${safeString(element.id, 30)}` : "";
+    const classes = getClassString(element, 3);
+
+    const overlay = document.createElement("div");
+    overlay.className = "ccr-modal-overlay";
+    overlay.innerHTML = `
+      <div class="ccr-modal">
+        <div class="ccr-modal-header">
+          <h2 class="ccr-modal-title">Capture Element Context</h2>
+          <button class="ccr-modal-close" id="ccr-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="ccr-modal-body">
+          <div class="ccr-element-info">
+            <span class="ccr-element-tag">&lt;${tagName}&gt;</span>
+            ${id ? `<span class="ccr-element-id">${escapeHtml(id)}</span>` : ""}
+            ${classes ? `<span class="ccr-element-class">${escapeHtml(classes)}</span>` : ""}
+          </div>
+          <label class="ccr-label" for="ccr-comment">Your Comment</label>
+          <textarea
+            class="ccr-textarea"
+            id="ccr-comment"
+            placeholder="Describe the issue, behavior, or context..."
+          ></textarea>
+          <div class="ccr-hint">Press Cmd+Enter to save</div>
+        </div>
+        <div class="ccr-modal-footer">
+          <button class="ccr-btn ccr-btn-secondary" id="ccr-cancel">Cancel</button>
+          <button class="ccr-btn ccr-btn-primary" id="ccr-save">Save Report</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    captureModal = overlay;
+
+    const textarea = overlay.querySelector("#ccr-comment");
+    const saveBtn = overlay.querySelector("#ccr-save");
+
+    // Focus textarea after a short delay to ensure modal is rendered
+    setTimeout(() => textarea?.focus(), 50);
+
+    // Event handlers
+    const closeHandler = () => closeModal();
+    const saveHandler = () => {
+      saveBtn.disabled = true;
+      saveReport(elementData, textarea.value);
+    };
+
+    overlay.querySelector("#ccr-close").addEventListener("click", closeHandler);
+    overlay.querySelector("#ccr-cancel").addEventListener("click", closeHandler);
+    saveBtn.addEventListener("click", saveHandler);
+
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.metaKey) {
+        e.preventDefault();
+        saveHandler();
+      }
+    });
+
+    // Close on overlay click
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeHandler();
+    });
+
+    // Close on escape
+    document.addEventListener("keydown", onModalKeyDown);
+  }
+
+  function onModalKeyDown(e) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeModal();
+    }
+  }
+
+  function closeModal() {
+    if (captureModal) {
+      captureModal.remove();
+      captureModal = null;
+    }
+    document.removeEventListener("keydown", onModalKeyDown);
+  }
+
+  // Extract element data with comprehensive error handling
+  function extractElementData(element) {
+    const data = {
+      selector: "",
+      xpath: "",
+      tagName: "",
+      id: null,
+      className: null,
+      textContent: "",
+      innerHTML: "",
+      attributes: {},
+      computedStyles: {},
+      boundingRect: null,
+      pageUrl: "",
+      pageTitle: ""
+    };
+
+    try {
+      data.tagName = element.tagName?.toLowerCase() || "unknown";
+    } catch { /* ignore */ }
+
+    try {
+      data.id = element.id || null;
+    } catch { /* ignore */ }
+
+    try {
+      data.className = (typeof element.className === "string")
+        ? element.className
+        : null;
+    } catch { /* ignore */ }
+
+    try {
+      data.selector = getCssSelector(element);
+    } catch (e) {
+      console.warn("Failed to generate CSS selector:", e);
+      data.selector = data.tagName;
+    }
+
+    try {
+      data.xpath = getXPath(element);
+    } catch (e) {
+      console.warn("Failed to generate XPath:", e);
+      data.xpath = "//" + data.tagName;
+    }
+
+    try {
+      const text = element.textContent || "";
+      data.textContent = safeString(text.trim(), MAX_TEXT_LENGTH);
+    } catch { /* ignore */ }
+
+    try {
+      data.innerHTML = safeString(element.innerHTML, MAX_HTML_LENGTH);
+    } catch { /* ignore */ }
+
+    try {
+      data.attributes = getAttributes(element);
+    } catch { /* ignore */ }
+
+    try {
+      data.computedStyles = getComputedStyles(element);
+    } catch { /* ignore */ }
+
+    try {
+      data.boundingRect = getBoundingRect(element);
+    } catch { /* ignore */ }
+
+    try {
+      data.pageUrl = window.location.href;
+      data.pageTitle = document.title || "";
+    } catch { /* ignore */ }
+
+    return data;
+  }
+
+  // Generate CSS selector with depth limiting and edge case handling
+  function getCssSelector(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const parts = [];
+    let el = element;
+    let depth = 0;
+
+    while (el && el.nodeType === Node.ELEMENT_NODE && depth < MAX_SELECTOR_DEPTH) {
+      // Skip html and body for cleaner selectors
+      if (el === document.documentElement || el === document.body) {
+        break;
+      }
+
+      let selector = el.tagName.toLowerCase();
+
+      // Handle SVG elements (they're in a different namespace)
+      if (el.namespaceURI === "http://www.w3.org/2000/svg" && selector !== "svg") {
+        // Just use the tag name for SVG children
+      }
+
+      // ID is unique - we can stop here (validate ID format)
+      if (el.id && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(el.id)) {
+        selector = `#${el.id}`;
+        parts.unshift(selector);
+        break;
+      }
+
+      // Add nth-of-type for disambiguation
+      const parent = el.parentElement;
+      if (parent) {
+        try {
+          const siblings = Array.from(parent.children).filter(
+            c => c.tagName === el.tagName
+          );
+          if (siblings.length > 1) {
+            const index = siblings.indexOf(el) + 1;
+            selector += `:nth-of-type(${index})`;
+          }
+        } catch {
+          // Shadow DOM or other edge case - skip disambiguation
+        }
+      }
+
+      parts.unshift(selector);
+      el = parent;
+      depth++;
+    }
+
+    return parts.join(" > ") || element.tagName?.toLowerCase() || "element";
+  }
+
+  // Generate XPath with depth limiting
+  function getXPath(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+
+    const parts = [];
+    let el = element;
+    let depth = 0;
+
+    while (el && el.nodeType === Node.ELEMENT_NODE && depth < MAX_SELECTOR_DEPTH) {
+      if (el === document.documentElement) {
+        parts.unshift("html");
+        break;
+      }
+
+      let index = 1;
+      let sibling = el.previousElementSibling;
+
+      while (sibling) {
+        if (sibling.tagName === el.tagName) index++;
+        sibling = sibling.previousElementSibling;
+      }
+
+      const tagName = el.tagName.toLowerCase();
+      parts.unshift(`${tagName}[${index}]`);
+      el = el.parentElement;
+      depth++;
+    }
+
+    return "/" + parts.join("/");
+  }
+
+  // Get element attributes safely
+  function getAttributes(element) {
+    const attrs = {};
+
+    try {
+      const attributes = element.attributes;
+      if (!attributes) return attrs;
+
+      for (let i = 0; i < attributes.length; i++) {
+        const attr = attributes[i];
+        // Skip style (we capture computed styles) and our data attributes
+        if (attr.name === "style" || attr.name.startsWith("data-ccr")) {
+          continue;
+        }
+        attrs[attr.name] = safeString(attr.value, MAX_ATTR_LENGTH);
+      }
+    } catch {
+      // Some elements may not support attribute access
+    }
+
+    return attrs;
+  }
+
+  // Get computed styles with proper CSS property names
+  function getComputedStyles(element) {
+    const styles = {};
+
+    try {
+      const computed = window.getComputedStyle(element);
+      if (!computed) return styles;
+
+      const styleProps = [
+        // Layout
+        "display", "position", "top", "right", "bottom", "left",
+        "width", "height", "min-width", "max-width", "min-height", "max-height",
+        "margin", "padding", "box-sizing",
+        // Flexbox
+        "flex-direction", "flex-wrap", "justify-content", "align-items", "gap",
+        // Grid
+        "grid-template-columns", "grid-template-rows",
+        // Typography
+        "font-family", "font-size", "font-weight", "line-height", "text-align", "color",
+        // Background
+        "background-color", "background-image",
+        // Border
+        "border", "border-radius",
+        // Effects
+        "opacity", "visibility", "overflow", "z-index",
+        // Transform
+        "transform"
+      ];
+
+      for (const prop of styleProps) {
+        try {
+          const value = computed.getPropertyValue(prop);
+          // Skip default/empty/zero values
+          if (value &&
+              value !== "none" &&
+              value !== "auto" &&
+              value !== "normal" &&
+              value !== "0px" &&
+              value !== "rgba(0, 0, 0, 0)") {
+            styles[prop] = value;
+          }
+        } catch {
+          // Skip properties that fail
+        }
+      }
+    } catch {
+      // getComputedStyle may fail for detached elements
+    }
+
+    return styles;
+  }
+
+  // Get bounding rect safely
+  function getBoundingRect(element) {
+    try {
+      const rect = element.getBoundingClientRect();
+      return {
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Save report with error handling
+  async function saveReport(elementData, comment) {
+    const report = {
+      ...elementData,
+      comment: safeString(comment.trim(), 2000)
+    };
+
+    try {
+      const response = await browser.runtime.sendMessage({
+        action: "saveReport",
+        report
+      });
+
+      if (response?.success) {
+        closeModal();
+        showToast("Report saved successfully!", "success");
+      } else {
+        showToast(response?.error || "Failed to save report", "error");
+      }
+    } catch (error) {
+      console.error("Failed to save report:", error);
+      showToast("Failed to save report: " + error.message, "error");
+    }
+  }
+
+  // Show toast notification
+  function showToast(message, type) {
+    // Remove any existing toasts
+    document.querySelectorAll(".ccr-toast").forEach(t => t.remove());
+
+    const toast = document.createElement("div");
+    toast.className = `ccr-toast ccr-toast-${type}`;
+    toast.textContent = message;
+    toast.setAttribute("role", "alert");
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.animation = "ccr-slide-in 0.3s ease reverse";
+      setTimeout(() => toast.remove(), 300);
+    }, 2500);
+  }
+})();

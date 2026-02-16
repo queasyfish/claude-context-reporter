@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Context Reporter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="header">
+      <h1 class="title">Context Reports</h1>
+      <div class="header-actions">
+        <button id="export-btn" class="icon-btn" title="Export all as JSON">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 10V2M8 10L5 7M8 10L11 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12V13C2 13.5523 2.44772 14 3 14H13C13.5523 14 14 13.5523 14 13V12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button id="clear-btn" class="icon-btn danger" title="Clear all reports">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 4H13M6 4V3C6 2.44772 6.44772 2 7 2H9C9.55228 2 10 2.44772 10 3V4M12 4V13C12 13.5523 11.5523 14 11 14H5C4.44772 14 4 13.5523 4 13V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>No reports yet</p>
+        <span class="empty-hint">Right-click any element and select "Capture for AI Context"</span>
+      </div>
+
+      <ul id="reports-list" class="reports-list"></ul>
+    </main>
+  </div>
+
+  <template id="report-template">
+    <li class="report-item">
+      <div class="report-header">
+        <span class="report-element"></span>
+        <span class="report-time"></span>
+      </div>
+      <p class="report-comment"></p>
+      <div class="report-url"></div>
+      <div class="report-actions">
+        <button class="btn btn-copy">Copy Markdown</button>
+        <button class="btn btn-delete">Delete</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="popup.js"></script>
+</body>
+</html>
